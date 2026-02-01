@@ -8,6 +8,7 @@
   "minNoctaliaVersion": "4.1.2",
   "tags": ["Launcher"],
   "entryPoints": {
+    "main": "Main.qml",
     "launcherProvider": "LauncherProvider.qml"
   }
 }
