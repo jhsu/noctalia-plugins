@@ -11,9 +11,8 @@
       "repository": "https://github.com/jhsu/noctalia-plugins",
       "minNoctaliaVersion": "4.1.2",
       "license": "MIT",
-      "tags": [
-        "Launcher"
-      ],
+      "tags": ["Launcher"],
       "lastUpdated": "2026-01-31T17:00:26+11:00"
     }
+  ]
 }
