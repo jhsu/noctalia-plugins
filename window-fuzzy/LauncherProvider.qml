@@ -8,8 +8,15 @@ Item {
 
     // Required properties
     property var pluginApi: null
+
+    property string name: "Window Fuzzy Provider"
     property var launcher: null
-    property string name: "Personal provider"
+    property string supportedLayouts: "list"
+
+    property string selectedCategory: "all"
+
+    // optional
+    property string emptyBrowsingMessage: "No windows found"
 
     // Window data cache
     property var windows: []
@@ -21,32 +28,40 @@ Item {
         id: niriWindowsProc
         command: ["niri", "msg", "-j", "windows"]
         onStarted: {
-            _windowsOutput = "";
+            root._windowsOutput = "";
         }
-        onStdout: data => {
-            _windowsOutput += data;
+        onStdoutChanged: {
+            root._windowsOutput = niriWindowsProc.stdout;
         }
-        onExited: code => {
+        onRunningChanged: {
+            if (running)
+                return;
+
+            var code = niriWindowsProc.exitStatus;
             if (code !== 0) {
-                Logger.e("NiriFocus", "Failed to fetch windows, exit code: " + code);
-                windows = [];
-                windowsLoaded = true;
+                Logger.e("NiriFocus: Failed to fetch windows, exit status: " + code);
+                root.windows = [];
+                root.windowsLoaded = true;
                 return;
             }
             try {
-                var data = JSON.parse(_windowsOutput);
-                windows = data || [];
-                windowsLoaded = true;
-                Logger.i("NiriFocus", "Loaded " + windows.length + " windows");
-                if (launcher) {
-                    launcher.updateResults();
+                var data = JSON.parse(root._windowsOutput);
+                root.windows = data || [];
+                root.windowsLoaded = true;
+                Logger.i("NiriFocus: Loaded " + root.windows.length + " windows");
+                if (root.launcher) {
+                    root.launcher.updateResults();
                 }
             } catch (e) {
-                Logger.e("NiriFocus", "Failed to parse windows JSON: " + e + " Output: " + _windowsOutput.substring(0, 100));
-                windows = [];
-                windowsLoaded = true;
+                Logger.e("NiriFocus: Failed to parse windows JSON: " + e + " Output: " + root._windowsOutput.substring(0, 100));
+                root.windows = [];
+                root.windowsLoaded = true;
             }
         }
+    }
+
+    function init() {
+        Logger.i("WindowFuzzy", "Initialized");
     }
 
     // Check if this provider handles the command
@@ -54,13 +69,17 @@ Item {
         return searchText.startsWith(">win");
     }
 
+    // Show in regular search results
+    // function handleSearch(searchText) {
+    // }
+
     // Return available commands when user types ">"
     function commands() {
         return [
             {
                 "name": ">win",
                 "description": "Focus niri window",
-                "icon": "app-window",
+                "icon": "search",
                 "isTablerIcon": true,
                 "onActivate": function () {
                     launcher.setSearchText(">win ");
@@ -79,20 +98,45 @@ Item {
     // Called when launcher is opened
     function onOpened() {
         windows = [];
-        windowsLoaded = false;
+        refreshWindows();
     }
 
     // Get search results
     function getResults(searchText) {
-        if (searchText.startsWith(">win")) {
-            // Fetch windows if not already loaded or loading
-            if (!windowsLoaded && !niriWindowsProc.running) {
-                refreshWindows();
-            }
-            return getWindowResults(searchText);
+        if (!searchText.startsWith(">win")) {
+            return [];
         }
 
-        return [];
+        // if loading
+        if (niriWindowsProc.running) {
+            return [
+                {
+                    name: "Loading...",
+                    icon: "refresh",
+                    isTablerIcon: true,
+                    "isImage": false,
+                    onActivate: function () {}
+                }
+            ];
+        }
+        //
+        // if not loaded
+        if (!windowsLoaded) {
+            return [
+                {
+                    name: "Windows not loaded",
+                    description: "Try reopening the launcher",
+                    icon: "alert-circle",
+                    isTablerIcon: true,
+                    onActivate: function () {
+                        root.init();
+                    }
+                }
+            ];
+        }
+        var query = searchText.slice(4).trim().toLowerCase();
+
+        return getWindowResults(query);
     }
 
     // Simple fuzzy search - checks if all chars in needle appear in order in haystack
@@ -112,18 +156,6 @@ Item {
     // Get window focus results
     function getWindowResults(searchText) {
         var query = searchText.slice(4).trim();
-
-        if (!windowsLoaded) {
-            return [
-                {
-                    "name": "Loading windows...",
-                    "description": "Fetching window list from niri",
-                    "icon": "refresh",
-                    "isTablerIcon": true,
-                    "onActivate": function () {}
-                }
-            ];
-        }
 
         var results = [];
         for (var i = 0; i < windows.length; i++) {

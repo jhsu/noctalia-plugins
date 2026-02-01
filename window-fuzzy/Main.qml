@@ -8,22 +8,21 @@ Item {
     IpcHandler {
         target: "plugin:window-fuzzy"
         function toggle(language: string, text: string) {
-            if (!pluginApi)
-                return;
-
             pluginApi.withCurrentScreen(screen => {
                 var launcherPanel = PanelService.getPanel("launcherPanel", screen);
                 if (!launcherPanel)
                     return;
 
                 var searchText = launcherPanel.searchText || "";
-                var isInTranslateMode = searchText.startsWith(">win");
+                var isInWindowSearchMode = searchText.startsWith(">win");
 
                 if (!launcherPanel.isPanelOpen) {
                     launcherPanel.open();
-                    launcherPanel.setSearchText(searchText);
+                    launcherPanel.setSearchText(">win ");
+                } else if (isInWindowSearchMode) {
+                    launcherPanel.close();
                 } else {
-                    launcherPanel.setSearchText(search);
+                    launcherPanel.setSearchText(">win ");
                 }
             });
         }
