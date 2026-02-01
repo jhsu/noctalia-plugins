@@ -28,16 +28,7 @@ Item {
         id: niriWindowsProc
         running: false
         command: ["niri", "msg", "-j", "windows"]
-        onStarted: {
-            root._windowsOutput = "";
-        }
-        onStdoutChanged: {
-            root._windowsOutput = niriWindowsProc.stdout;
-        }
-        stdout: StdioCollector {
-            onStreamFinished: Logger.l(`line read: ${this.text}`)
-        }
-
+        stdout: StdioCollector { id: windowsStdout }
         onExited: (exitCode, exitStatus) => {
             Logger.i("NiriFocus: Finished fetching windows, exit code: " + exitCode + ", exit status: " + exitStatus);
             if (exitCode !== 0) {
@@ -47,7 +38,7 @@ Item {
                 return;
             }
             try {
-                var data = JSON.parse(root._windowsOutput);
+                var data = JSON.parse(windowsStdout.text.trim());
                 root.windows = data || [];
                 root.windowsLoaded = true;
                 Logger.i("NiriFocus: Loaded " + root.windows.length + " windows");
