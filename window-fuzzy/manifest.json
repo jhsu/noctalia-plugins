@@ -1,7 +1,7 @@
 {
   "id": "window-fuzzy",
   "name": "Window Fuzzy",
-  "version": "1.0.5",
+  "version": "1.1.0",
   "author": "jhsu",
   "description": "Fuzzy find open windows",
   "repository": "https://github.com/jhsu/noctalia-plugins",
