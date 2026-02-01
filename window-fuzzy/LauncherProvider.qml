@@ -146,23 +146,65 @@ Item {
         return j === needle.length;
     }
 
+    // Returns a score for fuzzy match quality (lower is better)
+    // Returns -1 if no match
+    function fuzzyMatchScore(needle, haystack) {
+        if (needle === "")
+            return 0;
+        needle = needle.toLowerCase();
+        haystack = haystack.toLowerCase();
+
+        var score = 0;
+        var j = 0;
+        var lastMatchIndex = -1;
+
+        for (var i = 0; i < haystack.length && j < needle.length; i++) {
+            if (haystack[i] === needle[j]) {
+                if (lastMatchIndex !== -1) {
+                    // Consecutive matches are better (smaller gaps = lower score)
+                    score += (i - lastMatchIndex - 1) * 10;
+                } else {
+                    // Earlier matches are better
+                    score += i;
+                }
+                // Prefer word boundaries (after space, [, ], etc.)
+                if (i > 0 && !/[a-z0-9]/.test(haystack[i - 1])) {
+                    score -= 5;
+                }
+                lastMatchIndex = i;
+                j++;
+            }
+        }
+
+        if (j !== needle.length)
+            return -1; // No match
+
+        // Exact match gets bonus
+        if (haystack === needle)
+            score -= 100;
+        // Starts with needle gets bonus
+        else if (haystack.startsWith(needle))
+            score -= 50;
+
+        return score;
+    }
+
     // Get window focus results
     function getWindowResults(searchText) {
-        var query = searchText.slice(4).trim();
-
         var results = [];
         for (var i = 0; i < windows.length; i++) {
             var w = windows[i];
             var displayText = "[" + (w.app_id || "unknown") + "] " + (w.title || "Untitled");
             var searchStr = (w.app_id || "") + " " + (w.title || "");
 
-            if (query === "" || fuzzyMatch(query, searchStr)) {
+            if (searchText === "") {
                 results.push({
                     "name": displayText,
                     "description": "Focus this window",
                     "icon": "app-window",
                     "isTablerIcon": true,
                     "windowId": w.id,
+                    "_score": 0,
                     "onActivate": function (windowId) {
                         return function () {
                             Quickshell.execDetached(["niri", "msg", "action", "focus-window", "--id", String(windowId)]);
@@ -170,7 +212,32 @@ Item {
                         };
                     }(w.id)
                 });
+            } else {
+                var score = fuzzyMatchScore(searchText, searchStr);
+                if (score !== -1) {
+                    results.push({
+                        "name": displayText,
+                        "description": "Focus this window",
+                        "icon": "app-window",
+                        "isTablerIcon": true,
+                        "windowId": w.id,
+                        "_score": score,
+                        "onActivate": function (windowId) {
+                            return function () {
+                                Quickshell.execDetached(["niri", "msg", "action", "focus-window", "--id", String(windowId)]);
+                                launcher.close();
+                            };
+                        }(w.id)
+                    });
+                }
             }
+        }
+
+        // Sort by score (lower is better match)
+        if (searchText !== "") {
+            results.sort(function(a, b) {
+                return a._score - b._score;
+            });
         }
 
         if (results.length === 0) {
