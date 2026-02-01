@@ -7,7 +7,7 @@ Item {
 
     IpcHandler {
         target: "plugin:window-fuzzy"
-        function toggle(language: string, text: string) {
+        function toggle() {
             pluginApi.withCurrentScreen(screen => {
                 var launcherPanel = PanelService.getPanel("launcherPanel", screen);
                 if (!launcherPanel)

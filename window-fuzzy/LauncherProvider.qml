@@ -26,6 +26,7 @@ Item {
     // Process to fetch windows from niri
     Process {
         id: niriWindowsProc
+        running: false
         command: ["niri", "msg", "-j", "windows"]
         onStarted: {
             root._windowsOutput = "";
@@ -33,13 +34,14 @@ Item {
         onStdoutChanged: {
             root._windowsOutput = niriWindowsProc.stdout;
         }
-        onRunningChanged: {
-            if (running)
-                return;
+        stdout: StdioCollector {
+            onStreamFinished: Logger.l(`line read: ${this.text}`)
+        }
 
-            var code = niriWindowsProc.exitStatus;
-            if (code !== 0) {
-                Logger.e("NiriFocus: Failed to fetch windows, exit status: " + code);
+        onExited: (exitCode, exitStatus) => {
+            Logger.i("NiriFocus: Finished fetching windows, exit code: " + exitCode + ", exit status: " + exitStatus);
+            if (exitCode !== 0) {
+                Logger.e("NiriFocus: Failed to fetch windows, exit code: " + exitCode);
                 root.windows = [];
                 root.windowsLoaded = true;
                 return;
