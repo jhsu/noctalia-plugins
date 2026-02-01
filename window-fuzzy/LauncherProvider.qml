@@ -77,6 +77,10 @@ Item {
     // Get search results
     function getResults(searchText) {
         if (searchText.startsWith(">win")) {
+            // Fetch windows if not already loaded or loading
+            if (!windowsLoaded && !niriWindowsProc.running) {
+                refreshWindows();
+            }
             return getWindowResults(searchText);
         }
 
