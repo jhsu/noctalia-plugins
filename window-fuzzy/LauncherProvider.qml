@@ -14,27 +14,35 @@ Item {
     // Window data cache
     property var windows: []
     property bool windowsLoaded: false
+    property string _windowsOutput: ""
 
     // Process to fetch windows from niri
     Process {
         id: niriWindowsProc
         command: ["niri", "msg", "-j", "windows"]
+        onStarted: {
+            _windowsOutput = "";
+        }
+        onStdout: data => {
+            _windowsOutput += data;
+        }
         onExited: code => {
             if (code !== 0) {
-                Logger.e("NiriFocus", "Failed to fetch windows");
+                Logger.e("NiriFocus", "Failed to fetch windows, exit code: " + code);
                 windows = [];
                 windowsLoaded = true;
                 return;
             }
             try {
-                var data = JSON.parse(stdout);
+                var data = JSON.parse(_windowsOutput);
                 windows = data || [];
                 windowsLoaded = true;
+                Logger.i("NiriFocus", "Loaded " + windows.length + " windows");
                 if (launcher) {
                     launcher.updateResults();
                 }
             } catch (e) {
-                Logger.e("NiriFocus", "Failed to parse windows JSON:", e);
+                Logger.e("NiriFocus", "Failed to parse windows JSON: " + e + " Output: " + _windowsOutput.substring(0, 100));
                 windows = [];
                 windowsLoaded = true;
             }
@@ -138,6 +146,16 @@ Item {
                     }(w.id)
                 });
             }
+        }
+
+        if (results.length === 0) {
+            results.push({
+                "name": "No windows found",
+                "description": "Try a different search term",
+                "icon": "search-off",
+                "isTablerIcon": true,
+                "onActivate": function () {}
+            });
         }
 
         return results;
