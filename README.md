@@ -14,6 +14,10 @@ Find and install the desired plugins.
 
 Fuzzy find open windows and jump to focus the window.
 
+**Launcher Notifications**
+
+Browse recent Noctalia Shell notifications from the launcher with `>notif`.
+
 
 # License
 
