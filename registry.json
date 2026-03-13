@@ -15,6 +15,21 @@
       "official": false,
       "license": "MIT",
       "lastUpdated": "2026-02-02T03:35:28.489Z"
+    },
+    {
+      "id": "launcher-notifications",
+      "name": "Launcher Notifications",
+      "version": "1.0.0",
+      "author": "jhsu",
+      "description": "Browse recent Noctalia Shell notifications from the launcher",
+      "repository": "https://github.com/jhsu/noctalia-plugins",
+      "minNoctaliaVersion": "4.1.2",
+      "tags": [
+        "Launcher"
+      ],
+      "official": false,
+      "license": "MIT",
+      "lastUpdated": "2026-03-13T14:43:22.000Z"
     }
   ]
 }
