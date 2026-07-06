@@ -37,6 +37,7 @@ Item {
     property string detailText: "Loading Codex usage limits..."
     property string errorText: ""
     property string nextResetText: ""
+    property string usagePercentText: ""
     property string lastUpdatedText: ""
 
     implicitWidth: contentWidth
@@ -49,17 +50,20 @@ Item {
             errorText = data.error || "Unable to fetch Codex limits"
             detailText = errorText
             nextResetText = ""
+            usagePercentText = ""
             lastUpdatedText = data.retrieved_at || ""
             return
         }
 
         availableCount = Number(data.available_count || 0)
-        statusText = availableCount.toString()
+        usagePercentText = data.usage_percent_text || ""
+        statusText = usagePercentText.length > 0 ? usagePercentText : availableCount.toString()
         errorText = ""
         nextResetText = data.next_limit_reset_relative || ""
         lastUpdatedText = data.retrieved_at || ""
 
         var lines = [
+            "Codex usage: " + (usagePercentText.length > 0 ? usagePercentText : "unknown"),
             "Codex reset credits: " + availableCount,
             "Credits returned: " + Number(data.credits_returned || 0)
         ]
@@ -147,6 +151,27 @@ def collect_limit_resets(usage):
 
     return sorted(seconds for seconds, _ in candidates if seconds >= 0)
 
+def collect_used_percents(usage):
+    out = []
+    rate_limit = usage.get("rate_limit") if isinstance(usage, dict) else None
+    if isinstance(rate_limit, dict):
+        for window_name in ("primary_window", "secondary_window"):
+            window = rate_limit.get(window_name)
+            if isinstance(window, dict) and isinstance(window.get("used_percent"), (int, float)):
+                out.append(float(window["used_percent"]))
+
+    additional = usage.get("additional_rate_limits") if isinstance(usage, dict) else None
+    if isinstance(additional, list):
+        for item in additional:
+            limit = item.get("rate_limit") if isinstance(item, dict) else None
+            if isinstance(limit, dict):
+                for window_name in ("primary_window", "secondary_window"):
+                    window = limit.get(window_name)
+                    if isinstance(window, dict) and isinstance(window.get("used_percent"), (int, float)):
+                        out.append(float(window["used_percent"]))
+
+    return out
+
 codex_home_arg = sys.argv[1] if len(sys.argv) > 1 else ""
 codex_home = Path(codex_home_arg).expanduser() if codex_home_arg else Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
 auth_path = codex_home / "auth.json"
@@ -178,12 +203,16 @@ try:
     next_expiry = expiries[0] if expiries else None
     limit_resets = collect_limit_resets(usage)
     next_limit_reset_seconds = limit_resets[0] if limit_resets else None
+    used_percents = collect_used_percents(usage)
+    usage_percent = max(used_percents) if used_percents else None
 
     emit({
         "ok": True,
         "available_count": data.get("available_count", len(available)),
         "credits_returned": len(credits),
         "total_earned_count": data.get("total_earned_count"),
+        "usage_percent": usage_percent,
+        "usage_percent_text": f"{usage_percent:.0f}%" if usage_percent is not None else "",
         "next_limit_reset_relative": duration(next_limit_reset_seconds) if next_limit_reset_seconds is not None else "",
         "next_expiry_relative": duration((next_expiry - now).total_seconds()) if next_expiry else "",
         "next_expiry_local": next_expiry.astimezone().strftime("%Y-%m-%d %H:%M %Z") if next_expiry else "",
@@ -230,6 +259,13 @@ except Exception as exc:
             NText {
                 visible: !root.isBarVertical && root.nextResetText.length > 0 && root.errorText.length === 0
                 text: root.nextResetText
+                color: Color.mOnSurfaceVariant
+                pointSize: root.barFontSize
+            }
+
+            NText {
+                visible: !root.isBarVertical && root.errorText.length === 0 && root.availableCount >= 0
+                text: root.availableCount + " resets"
                 color: Color.mOnSurfaceVariant
                 pointSize: root.barFontSize
             }
