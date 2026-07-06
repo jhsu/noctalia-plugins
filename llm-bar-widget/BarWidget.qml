@@ -56,7 +56,7 @@ Item {
         availableCount = Number(data.available_count || 0)
         statusText = availableCount.toString()
         errorText = ""
-        nextResetText = data.next_expiry_relative || ""
+        nextResetText = data.next_limit_reset_relative || ""
         lastUpdatedText = data.retrieved_at || ""
 
         var lines = [
@@ -64,7 +64,7 @@ Item {
             "Credits returned: " + Number(data.credits_returned || 0)
         ]
         if (nextResetText.length > 0)
-            lines.push("Next expiry: " + nextResetText)
+            lines.push("Next limit reset: " + nextResetText)
         if (lastUpdatedText.length > 0)
             lines.push("Updated: " + lastUpdatedText)
         detailText = lines.join("\n")
@@ -103,6 +103,50 @@ def duration(seconds):
         return f"in {hours}h {minutes}m"
     return f"in {minutes}m"
 
+def fetch_json(path, access_token, account_id):
+    req = urllib.request.Request(
+        API_BASE + path,
+        headers={
+            "Authorization": "Bearer " + access_token,
+            "ChatGPT-Account-ID": account_id,
+            "originator": ORIGINATOR,
+            "User-Agent": USER_AGENT,
+        },
+    )
+    with urllib.request.urlopen(req, timeout=20) as response:
+        return json.loads(response.read().decode("utf-8", "replace"))
+
+def reset_candidates_from_window(window):
+    if not isinstance(window, dict):
+        return []
+    out = []
+    if isinstance(window.get("reset_after_seconds"), (int, float)):
+        out.append((float(window["reset_after_seconds"]), "window"))
+    reset_at = window.get("reset_at")
+    if isinstance(reset_at, (int, float)):
+        value = float(reset_at)
+        if value > 10000000000:
+            value = value / 1000
+        out.append((value - datetime.now(timezone.utc).timestamp(), "window"))
+    return out
+
+def collect_limit_resets(usage):
+    candidates = []
+    rate_limit = usage.get("rate_limit") if isinstance(usage, dict) else None
+    if isinstance(rate_limit, dict):
+        candidates += reset_candidates_from_window(rate_limit.get("primary_window"))
+        candidates += reset_candidates_from_window(rate_limit.get("secondary_window"))
+
+    additional = usage.get("additional_rate_limits") if isinstance(usage, dict) else None
+    if isinstance(additional, list):
+        for item in additional:
+            limit = item.get("rate_limit") if isinstance(item, dict) else None
+            if isinstance(limit, dict):
+                candidates += reset_candidates_from_window(limit.get("primary_window"))
+                candidates += reset_candidates_from_window(limit.get("secondary_window"))
+
+    return sorted(seconds for seconds, _ in candidates if seconds >= 0)
+
 codex_home_arg = sys.argv[1] if len(sys.argv) > 1 else ""
 codex_home = Path(codex_home_arg).expanduser() if codex_home_arg else Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
 auth_path = codex_home / "auth.json"
@@ -115,17 +159,8 @@ try:
     if not access_token or not account_id:
         raise RuntimeError("Missing tokens.access_token or tokens.account_id")
 
-    req = urllib.request.Request(
-        API_BASE + "/wham/rate-limit-reset-credits",
-        headers={
-            "Authorization": "Bearer " + access_token,
-            "ChatGPT-Account-ID": account_id,
-            "originator": ORIGINATOR,
-            "User-Agent": USER_AGENT,
-        },
-    )
-    with urllib.request.urlopen(req, timeout=20) as response:
-        data = json.loads(response.read().decode("utf-8", "replace"))
+    data = fetch_json("/wham/rate-limit-reset-credits", access_token, account_id)
+    usage = fetch_json("/wham/usage", access_token, account_id)
 
     credits = [c for c in data.get("credits", []) if isinstance(c, dict)]
     now = datetime.now(timezone.utc)
@@ -141,12 +176,15 @@ try:
             pass
     expiries.sort()
     next_expiry = expiries[0] if expiries else None
+    limit_resets = collect_limit_resets(usage)
+    next_limit_reset_seconds = limit_resets[0] if limit_resets else None
 
     emit({
         "ok": True,
         "available_count": data.get("available_count", len(available)),
         "credits_returned": len(credits),
         "total_earned_count": data.get("total_earned_count"),
+        "next_limit_reset_relative": duration(next_limit_reset_seconds) if next_limit_reset_seconds is not None else "",
         "next_expiry_relative": duration((next_expiry - now).total_seconds()) if next_expiry else "",
         "next_expiry_local": next_expiry.astimezone().strftime("%Y-%m-%d %H:%M %Z") if next_expiry else "",
         "retrieved_at": datetime.now().astimezone().strftime("%H:%M"),
