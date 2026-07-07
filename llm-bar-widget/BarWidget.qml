@@ -151,26 +151,14 @@ def collect_limit_resets(usage):
 
     return sorted(seconds for seconds, _ in candidates if seconds >= 0)
 
-def collect_used_percents(usage):
-    out = []
+def primary_used_percent(usage):
     rate_limit = usage.get("rate_limit") if isinstance(usage, dict) else None
     if isinstance(rate_limit, dict):
-        for window_name in ("primary_window", "secondary_window"):
-            window = rate_limit.get(window_name)
-            if isinstance(window, dict) and isinstance(window.get("used_percent"), (int, float)):
-                out.append(float(window["used_percent"]))
+        window = rate_limit.get("primary_window")
+        if isinstance(window, dict) and isinstance(window.get("used_percent"), (int, float)):
+            return float(window["used_percent"])
 
-    additional = usage.get("additional_rate_limits") if isinstance(usage, dict) else None
-    if isinstance(additional, list):
-        for item in additional:
-            limit = item.get("rate_limit") if isinstance(item, dict) else None
-            if isinstance(limit, dict):
-                for window_name in ("primary_window", "secondary_window"):
-                    window = limit.get(window_name)
-                    if isinstance(window, dict) and isinstance(window.get("used_percent"), (int, float)):
-                        out.append(float(window["used_percent"]))
-
-    return out
+    return None
 
 codex_home_arg = sys.argv[1] if len(sys.argv) > 1 else ""
 codex_home = Path(codex_home_arg).expanduser() if codex_home_arg else Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
@@ -203,8 +191,7 @@ try:
     next_expiry = expiries[0] if expiries else None
     limit_resets = collect_limit_resets(usage)
     next_limit_reset_seconds = limit_resets[0] if limit_resets else None
-    used_percents = collect_used_percents(usage)
-    usage_percent = max(used_percents) if used_percents else None
+    usage_percent = primary_used_percent(usage)
 
     emit({
         "ok": True,
