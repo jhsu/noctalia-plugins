@@ -1,7 +1,7 @@
 {
   "id": "llm-bar-widget",
   "name": "Codex Usage",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "manifest_version": 3,
   "minNoctaliaVersion": "4.0.0",
   "author": "jhsu",
@@ -12,7 +12,8 @@
   "metadata": {
     "defaultSettings": {
       "refreshIntervalMs": 900000,
-      "codexHome": ""
+      "codexHome": "",
+      "codexExecutable": "codex"
     }
   }
 }
