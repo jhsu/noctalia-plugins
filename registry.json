@@ -14,18 +14,18 @@
       ],
       "official": false,
       "license": "MIT",
-      "lastUpdated": "2026-07-07T13:58:40.925Z"
+      "lastUpdated": "2026-08-03T14:52:06.932Z"
     },
     {
       "id": "llm-bar-widget",
       "name": "Codex Usage",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "author": "jhsu",
       "description": "Shows Codex reset credits in the Noctalia bar.",
       "minNoctaliaVersion": "4.0.0",
       "official": false,
       "license": "MIT",
-      "lastUpdated": "2026-07-07T13:58:40.925Z"
+      "lastUpdated": "2026-08-03T14:52:06.932Z"
     },
     {
       "id": "window-fuzzy",
@@ -40,7 +40,7 @@
       ],
       "official": false,
       "license": "MIT",
-      "lastUpdated": "2026-07-07T13:58:40.926Z"
+      "lastUpdated": "2026-08-03T14:52:06.932Z"
     }
   ]
 }
