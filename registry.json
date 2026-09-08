@@ -19,9 +19,9 @@
     {
       "id": "llm-bar-widget",
       "name": "Codex Usage",
-      "version": "1.0.4",
+      "version": "1.1.0",
       "author": "jhsu",
-      "description": "Shows Codex reset credits in the Noctalia bar.",
+      "description": "Shows Codex reset credits in the Noctalia bar, across multiple OpenAI accounts.",
       "minNoctaliaVersion": "4.0.0",
       "official": false,
       "license": "MIT",
