@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -172,8 +173,65 @@ def reset_timestamps(result: dict[str, Any]) -> list[float]:
     return sorted(timestamps)
 
 
-def build_payload(result: dict[str, Any], now: float | None = None) -> dict[str, Any]:
-    now = time.time() if now is None else now
+def parse_accounts(args: list[str]) -> list[dict[str, str]]:
+    """Resolve accounts from argv.
+
+    Accepts either a JSON list (or single object) of account configs in the
+    first argument, or the legacy two-argument form (codexHome, executable).
+    """
+    if args and args[0].lstrip().startswith(("[", "{")):
+        try:
+            parsed = json.loads(args[0])
+        except json.JSONDecodeError as error:
+            raise RuntimeError(f"Invalid accounts JSON: {error}")
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        if not isinstance(parsed, list) or not parsed:
+            raise RuntimeError("Accounts JSON must be a non-empty list")
+
+        accounts: list[dict[str, str]] = []
+        for index, entry in enumerate(parsed, start=1):
+            if not isinstance(entry, dict):
+                entry = {"codexHome": str(entry)}
+            accounts.append(
+                {
+                    "name": str(entry.get("name") or f"Account {index}"),
+                    "codexHome": str(entry.get("codexHome") or ""),
+                    "codexExecutable": str(entry.get("codexExecutable") or "codex"),
+                }
+            )
+        return accounts
+
+    codex_home = args[0] if len(args) > 0 else ""
+    codex_executable = args[1] if len(args) > 1 else "codex"
+    return [
+        {
+            "name": "Codex",
+            "codexHome": codex_home,
+            "codexExecutable": codex_executable,
+        }
+    ]
+
+
+def fetch_accounts(accounts: list[dict[str, str]]) -> list[tuple[dict[str, str], Any]]:
+    """Query every account in parallel, keeping failures as exceptions."""
+    with ThreadPoolExecutor(max_workers=min(4, len(accounts))) as pool:
+        futures = [
+            pool.submit(read_rate_limits, account["codexExecutable"], account["codexHome"])
+            for account in accounts
+        ]
+        results: list[tuple[dict[str, str], Any]] = []
+        for account, future in zip(accounts, futures):
+            try:
+                results.append((account, future.result()))
+            except Exception as error:  # noqa: BLE001 - reported per account
+                results.append((account, error))
+        return results
+
+
+def build_account_payload(
+    name: str, result: dict[str, Any], now: float
+) -> dict[str, Any]:
     rate_limits = result.get("rateLimits")
     rate_limits = rate_limits if isinstance(rate_limits, dict) else {}
     primary = rate_limits.get("primary")
@@ -195,34 +253,88 @@ def build_payload(result: dict[str, Any], now: float | None = None) -> dict[str,
 
     return {
         "ok": True,
+        "name": name,
         "available_count": int(available_count),
         "credits_returned": len(credits),
         "usage_percent": used_percent,
         "usage_percent_text": (
             f"{used_percent:.0f}%" if used_percent is not None else ""
         ),
+        "next_limit_reset_in": future_resets[0] if future_resets else None,
         "next_limit_reset_relative": (
             duration(future_resets[0]) if future_resets else ""
         ),
-        "retrieved_at": datetime.now().astimezone().strftime("%H:%M"),
     }
 
 
-def error_payload(error: Exception) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "error": str(error),
+def build_payload(
+    account_results: list[tuple[dict[str, str], Any]], now: float | None = None
+) -> dict[str, Any]:
+    """Aggregate per-account results into the widget payload.
+
+    The top-level fields keep the single-account contract (worst usage across
+    accounts, summed reset credits, soonest reset) while every account also
+    appears in the "accounts" list for the tooltip.
+    """
+    now = time.time() if now is None else now
+    accounts: list[dict[str, Any]] = []
+    for account, outcome in account_results:
+        if isinstance(outcome, Exception):
+            accounts.append(
+                {
+                    "ok": False,
+                    "name": account["name"],
+                    "available_count": 0,
+                    "credits_returned": 0,
+                    "usage_percent": None,
+                    "usage_percent_text": "",
+                    "next_limit_reset_in": None,
+                    "next_limit_reset_relative": "",
+                    "error": str(outcome),
+                }
+            )
+        else:
+            accounts.append(build_account_payload(account["name"], outcome, now))
+
+    ok_accounts = [account for account in accounts if account["ok"]]
+    percents = [
+        account["usage_percent"]
+        for account in ok_accounts
+        if account["usage_percent"] is not None
+    ]
+    resets = [
+        account["next_limit_reset_in"]
+        for account in ok_accounts
+        if account["next_limit_reset_in"] is not None
+    ]
+
+    payload: dict[str, Any] = {
+        "ok": bool(ok_accounts),
+        "accounts": accounts,
+        "available_count": sum(account["available_count"] for account in ok_accounts),
+        "usage_percent": max(percents) if percents else None,
+        "usage_percent_text": f"{max(percents):.0f}%" if percents else "",
+        "next_limit_reset_relative": duration(min(resets)) if resets else "",
         "retrieved_at": datetime.now().astimezone().strftime("%H:%M"),
     }
+    if not payload["ok"]:
+        payload["error"] = "; ".join(
+            account["error"] for account in accounts if account["error"]
+        )
+    return payload
 
 
 def main() -> None:
-    codex_home = sys.argv[1] if len(sys.argv) > 1 else ""
-    codex_executable = sys.argv[2] if len(sys.argv) > 2 else "codex"
     try:
-        payload = build_payload(read_rate_limits(codex_executable, codex_home))
+        accounts = parse_accounts(sys.argv[1:])
+        payload = build_payload(fetch_accounts(accounts))
     except Exception as error:
-        payload = error_payload(error)
+        payload = {
+            "ok": False,
+            "error": str(error),
+            "accounts": [],
+            "retrieved_at": datetime.now().astimezone().strftime("%H:%M"),
+        }
     print(json.dumps(payload, separators=(",", ":")))
 
 

@@ -31,6 +31,24 @@ Item {
     readonly property string codexExecutable: pluginApi?.pluginSettings?.codexExecutable
         || pluginApi?.manifest?.metadata?.defaultSettings?.codexExecutable
         || "codex"
+    readonly property var accounts: {
+        var raw = pluginApi?.pluginSettings?.accountsJson
+            || pluginApi?.manifest?.metadata?.defaultSettings?.accountsJson
+            || ""
+        if (typeof raw !== "string" || raw.trim() === "")
+            return []
+        try {
+            var parsed = JSON.parse(raw)
+            if (!Array.isArray(parsed))
+                parsed = [parsed]
+            return parsed.filter(function (entry) {
+                return entry !== null && typeof entry === "object"
+            })
+        } catch (error) {
+            console.warn("llm-bar-widget: invalid accountsJson:", error)
+            return []
+        }
+    }
     readonly property string helperPath: decodeURIComponent(
         Qt.resolvedUrl("codex_usage.py").toString().replace(/^file:\/\//, "")
     )
@@ -61,6 +79,7 @@ Item {
             return
         }
 
+        var accountList = Array.isArray(data.accounts) ? data.accounts : []
         availableCount = Number(data.available_count || 0)
         usagePercentText = data.usage_percent_text || ""
         statusText = usagePercentText.length > 0 ? usagePercentText : availableCount.toString()
@@ -68,11 +87,31 @@ Item {
         nextResetText = data.next_limit_reset_relative || ""
         lastUpdatedText = data.retrieved_at || ""
 
-        var lines = [
-            "Codex usage: " + (usagePercentText.length > 0 ? usagePercentText : "unknown"),
-            "Codex reset credits: " + availableCount,
-            "Credits returned: " + Number(data.credits_returned || 0)
-        ]
+        var lines = []
+        if (accountList.length > 1) {
+            lines.push("Codex accounts:")
+            for (var i = 0; i < accountList.length; i++) {
+                var account = accountList[i]
+                if (!account.ok) {
+                    lines.push(account.name + ": error — " + (account.error || "unavailable"))
+                    continue
+                }
+                var line = account.name + ": "
+                    + (account.usage_percent_text.length > 0 ? account.usage_percent_text : "unknown")
+                    + " · " + Number(account.available_count || 0) + " resets"
+                if (account.next_limit_reset_relative.length > 0)
+                    line += " · reset " + account.next_limit_reset_relative
+                lines.push(line)
+            }
+            var failed = accountList.filter(function (entry) { return !entry.ok }).length
+            if (failed > 0)
+                lines.push(failed + " account(s) failed to update")
+        } else {
+            lines.push("Codex usage: " + (usagePercentText.length > 0 ? usagePercentText : "unknown"))
+            lines.push("Codex reset credits: " + availableCount)
+            lines.push("Credits returned: "
+                + Number(accountList.length > 0 ? accountList[0].credits_returned : 0))
+        }
         if (nextResetText.length > 0)
             lines.push("Next limit reset: " + nextResetText)
         if (lastUpdatedText.length > 0)
@@ -85,9 +124,12 @@ Item {
             return
 
         loading = true
-        fetchProcess.exec({
-            command: ["python3", helperPath, codexHome, codexExecutable]
-        })
+        var args = ["python3", helperPath]
+        if (accounts.length > 0)
+            args.push(JSON.stringify(accounts))
+        else
+            args.push(codexHome, codexExecutable)
+        fetchProcess.exec({ command: args })
     }
 
     Rectangle {

@@ -1,11 +1,11 @@
 {
   "id": "llm-bar-widget",
   "name": "Codex Usage",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "manifest_version": 3,
   "minNoctaliaVersion": "4.0.0",
   "author": "jhsu",
-  "description": "Shows Codex reset credits in the Noctalia bar.",
+  "description": "Shows Codex reset credits in the Noctalia bar, across multiple OpenAI accounts.",
   "entryPoints": {
     "barWidget": "BarWidget.qml"
   },
@@ -13,7 +13,8 @@
     "defaultSettings": {
       "refreshIntervalMs": 900000,
       "codexHome": "",
-      "codexExecutable": "codex"
+      "codexExecutable": "codex",
+      "accountsJson": ""
     }
   }
 }
